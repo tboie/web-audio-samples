@@ -33,7 +33,7 @@ class PolySynth {
 
     // The maximum and minimum cutoffs are experimentally determined.
     this.maxCutoff = 16000;
-    this.minCutoff = 60;
+    this.minCutoff =  60;
 
     // The maximum and minimum ADSR values refer to the ADSR for the gain as
     // well as the ADSR for the filter. These values are experimentally
