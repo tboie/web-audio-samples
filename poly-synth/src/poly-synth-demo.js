@@ -45,7 +45,8 @@ class PolySynthDemo {
     this.context_ = context;
     this.reverbSelectorId_ = identifiers.reverbSelectorId;
     this.impulseResponseUrls_ = this.getImpulseResponseUrls_();
-
+    this.drumSampleUrls_ = this.getDrumSampleUrls_();
+    
     this.masterGain_ = new GainNode(this.context_, {gain: 0.5});
     this.polySynth_ =
         new PolySynth(this.context_);
@@ -65,6 +66,7 @@ class PolySynthDemo {
     this.initializeDelayGUI_(identifiers.delayDivId);
     this.initializeReverbGUI_(identifiers.reverbDivId, this.reverbSelectorId_);
     this.initializeMasterVolumeGUI_(identifiers.volumeDivId);
+    this.initializeSideChainGUI_(identifiers.sideChainDivId);
     
     this.loadImpulseResponses(this.impulseResponseUrls_)
         .then((impulseResponseBuffers) => {
@@ -72,6 +74,20 @@ class PolySynthDemo {
           this.polySynth_.setConvolverBuffer(this.impulseResponseBuffers_[0]);
           document.getElementById(this.reverbSelectorId_).disabled = false;
         });
+
+    this.loadDrumSamples(this.drumSampleUrls_)
+        .then((drumSampleBuffers) => {
+          this.drumSampleBuffers_ = drumSampleBuffers;
+          //document.getElementById(this.reverbSelectorId_).disabled = false;
+        });
+  }
+
+  async loadDrumSamples(drumSamples){
+    let drumSampleBuffers = [];
+    for (let index in drumSamples) {
+      drumSampleBuffers[index] = await this.loadSound(drumSamples[index]);
+    }
+    return drumSampleBuffers;
   }
 
   async loadImpulseResponses(impulseResponses){
@@ -275,6 +291,7 @@ class PolySynthDemo {
     }
   }
 
+
   initializeReverbGUI_(reverbDivId, selectorId) {
     let reverbWetnessSlider_ = new ParamController(
         reverbDivId, this.polySynth_.setReverbWetness.bind(this.polySynth_),
@@ -363,10 +380,49 @@ class PolySynthDemo {
         });
   }
 
+  initializeSideChainGUI_(sideChainDivId) {
+    this.drumSamplePlaybackRateSlider_ = new ParamController(
+        sideChainDivId,
+        this.polySynth_.setDrumSamplePlaybackRate.bind(this.polySynth_), {
+          name: 'Playback rate',
+          id: 'feedbackDelayGain',
+          type: 'range',
+          min: this.polySynth_.minDrumSamplePlayBackrate,
+          max: this.polySynth_.maxDrumSamplePlayBackrate,
+          step: 0.1,
+          default: this.polySynth_.playbackRate
+        });
+
+    // Sound is not processed by the bitcrusher if in bypass mode.
+    document.getElementById('sideChainStartButton').onclick = (event) => {
+      // The change is scheduled slightly into the future to avoid glitching.
+      if (event.target.textContent === 'Start') {
+        event.target.textContent = 'Stop';
+        this.drumSamplePlaybackRateSlider_.disable();
+        this.polySynth_.setDrumSample(this.drumSampleBuffers_[0]);
+        this.polySynth_.activeNoisegateRoute.gain.value = 1;
+        this.polySynth_.bypassNoisegateRoute.gain.value = 0;
+      } else {
+        event.target.textContent = 'Start';
+        this.drumSamplePlaybackRateSlider_.enable();
+        this.polySynth_.stopDrumSample();
+        this.polySynth_.activeNoisegateRoute.gain.value = 0;
+        this.polySynth_.bypassNoisegateRoute.gain.value = 1;
+      }
+    }
+  }
+  
+  getDrumSampleUrls_() {
+    let drumSampleUrls =
+        [
+          '../samples/audio/impulse-responses/backslap1.wav'
+        ];
+    return drumSampleUrls;
+  }
+
   getImpulseResponseUrls_() {
     let impulseResponseUrls =
         [
-          '../samples/audio/impulse-responses/matrix-reverb1.wav',
           '../samples/audio/impulse-responses/backslap1.wav',
           '../samples/audio/impulse-responses/backwards-4.wav',
           '../samples/audio/impulse-responses/bright-hall.wav',
@@ -385,6 +441,7 @@ class PolySynthDemo {
           '../samples/audio/impulse-responses/filter-telephone.wav',
           '../samples/audio/impulse-responses/imp_sequence.wav',
           '../samples/audio/impulse-responses/impulse-rhythm1.wav',
+          '../samples/audio/impulse-responses/matrix-reverb1.wav',
           '../samples/audio/impulse-responses/matrix6-backwards.wav',
           '../samples/audio/impulse-responses/medium-room1.wav',
           '../samples/audio/impulse-responses/noise-spreader1.wav',

@@ -33,7 +33,7 @@ class PolySynth {
 
     // The maximum and minimum cutoffs are experimentally determined.
     this.maxCutoff = 16000;
-    this.minCutoff =  60;
+    this.minCutoff = 60;
 
     // The maximum and minimum ADSR values refer to the ADSR for the gain as
     // well as the ADSR for the filter. These values are experimentally
@@ -67,33 +67,48 @@ class PolySynth {
 
     // By default no delay is applied. The gain and delay time are
     // experimentally determined.
-    this.delayWetness = 0.6;
-    this.feedbackDelayGain = 0.2;
-    this.feedbackDelayTime = 0.4;
+    this.delayWetness = 0;
+    this.feedbackDelayGain = 0.5;
+    this.feedbackDelayTime = 0.2;
 
     // By default, no reverb is applied.
-    this.reverbWetness = 0.4;
+    this.reverbWetness = 0;
+
+    this.playbackRate = 5.0;
+    
+    this.minDrumSamplePlayBackrate = 0.5;
+    this.maxDrumSamplePlayBackrate = 30;
+
+    this.minAttack = 0;
+    this.maxAttack = 1;
+    this.attack = 0.1
+    this.minRelease = 0;
+    this.release = 0.1;
+    this.maxRelease = 1;
 
     // The initial values for the parameters are experimentally determined.
     this.parameters_ = {
-      gainAttack: 0.0,
-      gainDecay: 0.32,
-      gainSustain: this.minSustain,
-      gainRelease: 0.13,
-      filterCutoff: 60,
-      filterQ: 15.35,
-      filterAttack: 0,
-      filterDecay: 0.58,
+      gainAttack: 0.1,
+      gainDecay: this.minDecay,
+      gainSustain: 0.5,
+      gainRelease: 0.1,
+      filterCutoff: 440,
+      filterQ: 0,
+      filterAttack: 1,
+      filterDecay: 1,
       filterSustain: this.minSustain,
-      filterRelease: 0.48,
-      filterDetuneAmount: 3.27,
+      filterRelease: this.minRelease,
+      filterDetuneAmount: 1,
     };
 
     // Each voice is connected to |this.voiceOutput_|.
     this.voiceOutput_ = new GainNode(this.context_);
 
-    // The output of |this.voiceOutput_| is processed by three effects:
+    // The output of |this.voiceOutput_| is processed by (TODO)three effects:
     // bitcrushing, delay, and reverb.
+    let noisegateInputNode = new GainNode(this.context_);
+    let noisegateOutputNode = this.createNoisegateSideChainGraph_(noisegateInputNode);
+    
     let bitcrusherInputNode = new GainNode(this.context_);
     let bitcrusherOutputNode = this.createBitcrusherGraph_(bitcrusherInputNode);
 
@@ -107,9 +122,34 @@ class PolySynth {
     this.output = new GainNode(this.context_);
 
     this.voiceOutput_.connect(bitcrusherInputNode);
-    bitcrusherOutputNode.connect(delayInputNode);
+    bitcrusherOutputNode.connect(noisegateInputNode);
+    noisegateOutputNode.connect(delayInputNode);
     delayOutputNode.connect(reverbInputNode);
     reverbOutputNode.connect(this.output);
+  }
+
+  createNoisegateSideChainGraph_(inputNode) {
+    this.noisegate = new NoiseGate(this.context_, {numberOfChannels: 2, attack: 0.1, release: 0.1});
+    //TODO change gain
+    this.activeNoisegateRoute = new GainNode(this.context_, {gain: 1});
+    this.bypassNoisegateRoute = new GainNode(this.context_, {gain: 0});
+    let noisegateOutputNode = new GainNode(this.context_);
+
+    // By default there is no drum source.
+    this.drumSource_ = new AudioBufferSourceNode(this.context_);
+    this.mergerNode_ = new ChannelMergerNode(this.context_, {numberOfInputs: 2});
+
+    inputNode.connect(this.bypassNoisegateRoute).connect(noisegateOutputNode);
+    inputNode.connect(this.activeNoisegateRoute);
+
+    this.drumSource_ = new AudioBufferSourceNode(this.context_);
+    this.drumSource_.connect(this.mergerNode_, 0, 0);
+    this.activeNoisegateRoute.connect(this.mergerNode_, 0, 1);
+    this.mergerNode_.connect(this.noisegate.input);
+
+    this.noisegate.output.connect(noisegateOutputNode);
+   
+    return noisegateOutputNode;
   }
 
   createDelayGraph_(inputNode) {
@@ -248,6 +288,22 @@ class PolySynth {
     this.convolver_.buffer = impulseResponseBuffer;
   }
 
+  setDrumSample(drumSampleBuffer) {
+    this.drumSource_ = new AudioBufferSourceNode(this.context_, {
+      buffer: drumSampleBuffer,
+      loop: true,
+      playbackRate: this.playbackRate
+    });
+    this.drumSource_.connect(this.mergerNode_, 0, 0);
+    this.drumSource_.connect(this.mergerNode_, 0, 1);
+    this.drumSource_.start();
+  }
+
+  stopDrumSample() {
+    this.drumSource_.stop();
+    this.drumSource_.disconnect();
+  }
+
   /**
    * Set the amount feedback delay to apply.
    * @param {Number} value The new gain of |this.delayWetSignalGain_|.
@@ -271,6 +327,10 @@ class PolySynth {
    */
   setFeedbackDelayGain(value) {
     this.feedbackDelayGainNode_.gain.value = value;
+  }
+
+  setDrumSamplePlaybackRate(value) {
+    this.playbackRate = value;
   }
 
   /**
